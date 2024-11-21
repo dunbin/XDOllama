@@ -28,4 +28,4 @@
 ![image](https://github.com/user-attachments/assets/86bd3bad-6c44-4987-a9aa-38a9a9e17c93)
 
 ## 补充
-由于只是文科生，第一次开发MacOS桌面端，略有生疏，希望有兴趣的朋友一起加入完成。
+由于只是文科生，第一次开发MacOS桌面端，技术欠佳，希望有兴趣的朋友一起加入优化完成。
