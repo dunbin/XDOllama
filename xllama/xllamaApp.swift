@@ -8,12 +8,12 @@
 import SwiftUI
 
 @main
-struct xllamaApp: App {
+struct XLlamaApp: App {
+    @StateObject private var networkService = NetworkService.shared
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .navigationTitle("XDOllama")
-                .frame(minWidth: 800, minHeight: 600)
         }
     }
 }

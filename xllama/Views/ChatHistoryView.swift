@@ -66,59 +66,67 @@ struct ConversationCard: View {
     
     var body: some View {
         Button(action: onTap) {
-            HStack {
+            HStack(spacing: 8) {
                 // 对话图标
                 Image(systemName: "message")
                     .font(.system(size: 14))
-                    .foregroundColor(isSelected ? .white : .gray)
+                    .foregroundColor(isSelected ? .white : .secondary)
+                    .frame(width: 16)
                 
                 // 对话标题
                 Text(conversation.title)
-                    .lineLimit(2)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .font(.system(size: 13))
                     .foregroundColor(isSelected ? .white : .primary)
                 
-                Spacer()
+                Spacer(minLength: 0)
                 
-                // 删除按钮 - 只在悬停时显示
-                if isHovered {
-                    Button(action: onDelete) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 12))
-                            .foregroundColor(isSelected ? .white.opacity(0.7) : .gray)
+                HStack(spacing: 4) {
+                    // 删除按钮 - 固定位置
+                    if isHovered {
+                        Button(action: onDelete) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 12))
+                                .foregroundColor(isSelected ? .white.opacity(0.7) : .secondary)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .transition(.opacity)
+                        .frame(width: 20)
                     }
-                    .buttonStyle(PlainButtonStyle())
-                }
-                
-                // 消息数量指示
-                if !conversation.messages.isEmpty {
-                    Text("\(conversation.messages.count)")
-                        .font(.system(size: 12))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(isSelected ? Color.white.opacity(0.2) : Color.gray.opacity(0.2))
-                        )
-                        .foregroundColor(isSelected ? .white : .gray)
+                    
+                    // 消息数量指示
+                    if !conversation.messages.isEmpty {
+                        Text("\(conversation.messages.count)")
+                            .font(.system(size: 12))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule()
+                                    .fill(isSelected ? Color.white.opacity(0.2) : Color.secondary.opacity(0.2))
+                            )
+                            .foregroundColor(isSelected ? .white : .secondary)
+                    }
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 19)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? Color.black : Color.clear)
+                    .fill(isSelected ? Color.accentColor : Color(.controlBackgroundColor))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.gray.opacity(0.2), lineWidth: isSelected ? 0 : 1)
+                    .stroke(Color.secondary.opacity(0.2), lineWidth: isSelected ? 0 : 1)
             )
         }
         .buttonStyle(PlainButtonStyle())
         .onHover { hovering in
-            isHovered = hovering
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHovered = hovering
+            }
         }
     }
 }

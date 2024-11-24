@@ -6,11 +6,14 @@ class ChatService: ObservableObject {
     
     @Published var messages: [ChatMessage] = []
     @Published var isLoading = false
+    @Published var streamResponse: String = ""
     
     private let ollamaService = OllamaService.shared
     private let xinferenceService = XinferenceService.shared
     
     private weak var chatHistoryManager: ChatHistoryManager?
+    
+    private var isCancelled = false
     
     private init() {}
     
@@ -27,13 +30,13 @@ class ChatService: ObservableObject {
     }
     
     func sendMessage(_ content: String) async {
-        // 委托给 ChatHistoryManager 处理初始对话创建
         await chatHistoryManager?.sendMessage(content)
         
         let userMessage = ChatMessage(content: content, isUser: true)
         await MainActor.run {
             messages.append(userMessage)
             isLoading = true
+            streamResponse = ""
             messages.append(ChatMessage(content: "", isUser: false))
         }
         
@@ -56,12 +59,12 @@ class ChatService: ObservableObject {
         guard let lastUserMessage = messages.last(where: { $0.isUser }),
               messages.count >= 2 else { return }
         
-        // 移除最后一条 AI 响应
         await MainActor.run {
             if !messages.last!.isUser {
                 messages.removeLast()
             }
             isLoading = true
+            streamResponse = ""
             messages.append(ChatMessage(content: "", isUser: false))
         }
         
@@ -87,6 +90,7 @@ class ChatService: ObservableObject {
         await MainActor.run {
             messages.append(userMessage)
             isLoading = true
+            streamResponse = ""
             messages.append(ChatMessage(content: "", isUser: false))
         }
         
@@ -112,6 +116,7 @@ class ChatService: ObservableObject {
         await MainActor.run {
             messages.append(userMessage)
             isLoading = true
+            streamResponse = ""
             messages.append(ChatMessage(content: "", isUser: false))
         }
         
@@ -130,7 +135,14 @@ class ChatService: ObservableObject {
         }
     }
     
+    func cancelGeneration() {
+        isCancelled = true
+    }
+    
     private func generateStreamResponse(_ prompt: String) async throws {
+        isCancelled = false
+        var accumulatedResponse = ""
+        
         guard let url = URL(string: "\(ollamaService.baseURL)/api/chat") else {
             throw URLError(.badURL)
         }
@@ -159,20 +171,26 @@ class ChatService: ObservableObject {
         }
         
         for try await line in bytes.lines {
-            guard !line.isEmpty else { continue }
+            if isCancelled {
+                await MainActor.run {
+                    isLoading = false
+                }
+                break
+            }
             
-            print("Received stream data:", line)
+            guard !line.isEmpty else { continue }
             
             if let data = line.data(using: .utf8),
                let response = try? JSONDecoder().decode(StreamResponse.self, from: data) {
+                accumulatedResponse += response.message.content
+                
                 await MainActor.run {
+                    self.streamResponse = accumulatedResponse
                     if var lastMessage = messages.last, !lastMessage.isUser {
-                        lastMessage.content += response.message.content
+                        lastMessage.content = accumulatedResponse
                         messages[messages.count - 1] = lastMessage
-                        
-                        // 触发 UI 更新以实时滚动
-                        objectWillChange.send()
                     }
+                    objectWillChange.send()
                 }
                 
                 if response.done {
@@ -183,6 +201,9 @@ class ChatService: ObservableObject {
     }
     
     private func generateXinferenceResponse(_ prompt: String) async throws {
+        isCancelled = false
+        var accumulatedResponse = ""
+        
         guard let url = URL(string: "\(xinferenceService.baseURL)/v1/chat/completions") else {
             throw URLError(.badURL)
         }
@@ -215,17 +236,29 @@ class ChatService: ObservableObject {
         }
         
         for try await line in bytes.lines {
+            if isCancelled {
+                await MainActor.run {
+                    isLoading = false
+                }
+                break
+            }
+            
             guard !line.isEmpty, line != "data: [DONE]" else { continue }
             
             if let dataRange = line.range(of: "data: ") {
                 let jsonString = String(line[dataRange.upperBound...])
                 if let data = jsonString.data(using: .utf8),
                    let response = try? JSONDecoder().decode(StreamResponse.self, from: data) {
-                    await MainActor.run {
-                        if var lastMessage = messages.last, !lastMessage.isUser {
-                            lastMessage.content += response.choices.first?.delta.content ?? ""
-                            messages[messages.count - 1] = lastMessage
-                            objectWillChange.send()
+                    if let content = response.choices.first?.delta.content {
+                        accumulatedResponse += content
+                        
+                        await MainActor.run {
+                            self.streamResponse = accumulatedResponse
+                            if var lastMessage = messages.last, !lastMessage.isUser {
+                                lastMessage.content = accumulatedResponse
+                                messages[messages.count - 1] = lastMessage
+                                objectWillChange.send()
+                            }
                         }
                     }
                 }
@@ -234,6 +267,9 @@ class ChatService: ObservableObject {
     }
     
     private func generateDifyResponse(_ prompt: String) async throws {
+        isCancelled = false
+        var accumulatedResponse = ""
+        
         let difyService = DifyService.shared
         
         guard !difyService.apiKey.isEmpty, 
@@ -267,39 +303,49 @@ class ChatService: ObservableObject {
             }
         }
         
-        var fullResponse = ""
-        
         for try await line in bytes.lines {
+            if isCancelled {
+                await MainActor.run {
+                    isLoading = false
+                }
+                break
+            }
+            
             guard !line.isEmpty, line.hasPrefix("data: ") else { continue }
             
             let jsonString = String(line.dropFirst(6))
-            print("Received Dify stream data: \(jsonString)") // 添加调试日志
-            
             if let data = jsonString.data(using: .utf8),
                let response = try? JSONDecoder().decode(DifyStreamResponse.self, from: data) {
                 
-                // 尝试从不同字段获取内容
                 let content = response.message?.content ?? response.answer ?? ""
                 
                 if !content.isEmpty {
-                    // 使用 MainActor 确保在主线程更新
+                    accumulatedResponse += content
+                    
                     await MainActor.run {
+                        self.streamResponse = accumulatedResponse
                         if var lastMessage = messages.last, !lastMessage.isUser {
-                            lastMessage.content += content
+                            lastMessage.content = accumulatedResponse
                             messages[messages.count - 1] = lastMessage
+                            objectWillChange.send()
                         }
                     }
-                    
-                    fullResponse += content
                 }
                 
-                // 检查是否为最后一个事件
                 if response.event == "message_end" || response.event == "[DONE]" {
                     break
                 }
             }
         }
-        
-        print("Full Dify response: \(fullResponse)") // 调试输出完整响应
+    }
+    
+    private func handleStreamResponse(_ response: String) {
+        DispatchQueue.main.async {
+            self.streamResponse = response
+            // 更新最后一条消息的内容
+            if let lastIndex = self.messages.lastIndex(where: { !$0.isUser }) {
+                self.messages[lastIndex].content = response
+            }
+        }
     }
 } 

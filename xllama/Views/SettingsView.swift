@@ -97,6 +97,7 @@ struct SettingsView: View {
     @State private var showOllamaSettings = false
     @State private var showXinferenceSettings = false
     @State private var showDifySettings = false
+    @State private var showNetworkSettings = false
     
     var body: some View {
         VStack {
@@ -148,13 +149,51 @@ struct SettingsView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                
+                Button(action: { showNetworkSettings.toggle() }) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.black)
+                            .frame(height: 44)
+                        
+                        Text("网络设置")
+                            .foregroundColor(.white)
+                    }
+                }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 40)
             
             Spacer()
-            Spacer()
+            
+            // 添加作者信息和 GitHub 链接
+            VStack(spacing: 8) {
+                VStack(spacing: 4) {
+                    Text("作者：耳听西湖")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                    Text("B站：耳听西湖")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                    Text("github项目地址：")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                }
+                
+                Button(action: {
+                    if let url = URL(string: "https://github.com/dunbin/XDOllama") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    Image(systemName: "link.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.gray)
+                }
+            }
+            .padding(.bottom, 24)
+            .padding(.top, 16)
         }
-        .frame(width: 400, height: 300)
+        .frame(width: 400, height: 400)
         .background(Color(.windowBackgroundColor))
         .sheet(isPresented: $showOllamaSettings) {
             OllamaSettingsView()
@@ -164,6 +203,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showDifySettings) {
             DifySettingsView()
+        }
+        .sheet(isPresented: $showNetworkSettings) {
+            NetworkSettingsView()
         }
     }
 }
@@ -231,7 +273,7 @@ struct OllamaSettingsView: View {
             
             Spacer()
         }
-        .frame(width: 400, height: 300)
+        .frame(width: 400, height: 400)
         .background(Color(.windowBackgroundColor))
         .onAppear {
             refreshModels()
@@ -566,4 +608,66 @@ struct ModelsResponse: Codable {
 struct ModelInfo: Codable {
     let id: String
     // 添加其他需要的字段
+}
+
+struct NetworkSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var networkService = NetworkService.shared
+    @AppStorage("network_server_autostart") private var autoStart = false
+    
+    var body: some View {
+        VStack {
+            HStack {
+                Text("网络设置")
+                    .font(.headline)
+                Spacer()
+                Button("完成") {
+                    dismiss()
+                }
+            }
+            .padding()
+            
+            Form {
+                Section(header: Text("局域网服务").font(.headline)) {
+                    Toggle("启用局域网服务", isOn: Binding(
+                        get: { networkService.isRunning },
+                        set: { newValue in
+                            if newValue {
+                                networkService.startServer()
+                            } else {
+                                networkService.stopServer()
+                            }
+                        }
+                    ))
+                    .padding(.vertical, 5)
+                    
+                    Toggle("开机自动启动", isOn: $autoStart)
+                        .padding(.vertical, 5)
+                    
+                    if networkService.isRunning {
+                        Text("服务地址：\(networkService.serverURL)")
+                            .textSelection(.enabled)
+                            .padding(.vertical, 5)
+                        
+                        Text("他设备可以过浏览器访问上述地址使用 AI 服务")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    HStack {
+                        Text("端口号：")
+                        TextField("端口号", value: $networkService.serverPort, formatter: NumberFormatter())
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .frame(width: 100)
+                    }
+                    .padding(.vertical, 5)
+                }
+            }
+            .padding()
+            
+            Spacer()
+        }
+        .frame(width: 400, height: 400)
+        .background(Color(.windowBackgroundColor))
+    }
 } 

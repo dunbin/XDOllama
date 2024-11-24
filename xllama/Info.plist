@@ -4,7 +4,7 @@
 <dict>
     <!-- 添加应用类别 -->
     <key>LSApplicationCategoryType</key>
-    <string>public.app-category.productivity</string>
+    <string>public.app-category.developer-tools</string>
     
     <!-- 其他已有配置 -->
     <key>CFBundleName</key>
